@@ -3,7 +3,7 @@ const fs = require("fs");
 
 const FILE_JSON = "data.json";
 
-// Telegram config dari GitHub Secrets
+// Telegram config
 const TELEGRAM_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const CHAT_ID = process.env.TELEGRAM_CHAT_ID;
 
@@ -11,11 +11,12 @@ const CHAT_ID = process.env.TELEGRAM_CHAT_ID;
 const USD_TO_IDR = 15000;
 
 // CONFIG
-const COINS_PER_PAGE = 100;   // 100 koin per request
-const MAX_PAGES = 5;          // total 500 koin
-const MAX_PRICE_IDR = 30000;  // maksimal harga koin yang ditampilkan
-const DELAY_MS = 1000;        // delay antar page 1 detik
-const RETRIES = 5;            // retry saat kena 429
+const COINS_PER_PAGE = 100;      // 100 koin per request
+const MAX_PAGES = 3;             // scan 3 page → 300 koin kecil
+const MAX_PRICE_IDR = 30000;     // harga maksimal koin
+const PAGE_DELAY_MS = 10000;     // delay 10 detik antar page
+const RETRIES = 3;               // retry saat 429
+const RETRY_DELAY_MS = 5000;     // delay 5 detik antar retry
 const DIFF_PERCENT_MIN = 0.9;
 const DIFF_PERCENT_MAX = 1.1;
 
@@ -40,8 +41,8 @@ function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-// Fetch dengan retry saat rate limit 429
-async function fetchWithRetry(url, params, retries = RETRIES, delayMs = 2000) {
+// Fetch dengan retry saat kena 429
+async function fetchWithRetry(url, params, retries = RETRIES, delayMs = RETRY_DELAY_MS) {
   for (let i = 0; i <= retries; i++) {
     try {
       const res = await axios.get(url, { params, timeout: 10000 });
@@ -81,7 +82,7 @@ async function getCrypto() {
         const priceUSD = c.current_price;
         const priceIDR = priceUSD * USD_TO_IDR;
 
-        if (priceIDR >= MAX_PRICE_IDR) return; // filter harga maksimal
+        if (priceIDR >= MAX_PRICE_IDR) return;
 
         const lowPrice = c.low_24h;
         const diffPercent = lowPrice > 0 ? ((priceUSD - lowPrice)/lowPrice*100).toFixed(2) : 0;
@@ -90,14 +91,14 @@ async function getCrypto() {
           candidates.push({ symbol, price: priceIDR, lowPrice: lowPrice*USD_TO_IDR, diffPercent });
         }
 
-        // Update historis harga (2 terakhir)
+        // Update historis harga 2 terakhir
         let history = oldData[symbol] || [];
         if (!Array.isArray(history)) history = [history];
         newData[symbol] = [...history, priceUSD].slice(-2);
       });
 
       // Delay antar page supaya aman rate limit
-      await sleep(DELAY_MS);
+      await sleep(PAGE_DELAY_MS);
     }
 
     // Kirim Telegram jika ada kandidat
