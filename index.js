@@ -72,7 +72,7 @@ async function getCrypto() {
       console.log(`Scanning page ${page}...`);
       const res = await fetchWithRetry("https://api.coingecko.com/api/v3/coins/markets", {
         vs_currency: "usd",
-        order: "market_cap_asc", // koin kecil dulu
+        order: "market_cap_asc",
         per_page: COINS_PER_PAGE,
         page,
       });
@@ -87,8 +87,15 @@ async function getCrypto() {
         const lowPrice = c.low_24h;
         const diffPercent = lowPrice > 0 ? ((priceUSD - lowPrice)/lowPrice*100).toFixed(2) : 0;
 
-        if (diffPercent >= DIFF_PERCENT_MIN && diffPercent <= DIFF_PERCENT_MAX) {
-          candidates.push({ symbol, price: priceIDR, lowPrice: lowPrice*USD_TO_IDR, diffPercent });
+        // Near low ±1%
+        if ((diffPercent >= DIFF_PERCENT_MIN && diffPercent <= DIFF_PERCENT_MAX) || priceUSD <= lowPrice) {
+          candidates.push({ 
+            symbol, 
+            price: priceIDR, 
+            lowPrice: lowPrice*USD_TO_IDR, 
+            diffPercent,
+            belowLow: priceUSD <= lowPrice
+          });
         }
 
         // Update historis harga 2 terakhir
@@ -97,7 +104,6 @@ async function getCrypto() {
         newData[symbol] = [...history, priceUSD].slice(-2);
       });
 
-      // Delay antar page supaya aman rate limit
       await sleep(PAGE_DELAY_MS);
     }
 
@@ -114,14 +120,15 @@ async function getCrypto() {
 
       let msg = "*🔎 COIN NEAR LOW ALERT*\n\n";
       uniqueCandidates.forEach(c => {
-        msg += `*${c.symbol}* | Price: Rp${c.price.toLocaleString("id-ID")} | Low: Rp${c.lowPrice.toLocaleString("id-ID")} | Δ: ${c.diffPercent}%\n`;
+        msg += `*${c.symbol}* | Price: Rp${c.price.toLocaleString("id-ID")} | Low: Rp${c.lowPrice.toLocaleString("id-ID")} | Δ: ${c.diffPercent}%`;
+        if (c.belowLow) msg += " 💥 Price below 24h low!";
+        msg += "\n";
       });
       await sendTelegram(msg);
     } else {
-      console.log("Tidak ada koin kecil yang mendekati low 1% saat ini.");
+      console.log("Tidak ada koin kecil yang mendekati low atau di bawah low 24h saat ini.");
     }
 
-    // Simpan JSON
     fs.writeFileSync(FILE_JSON, JSON.stringify(newData, null, 2));
 
   } catch(err) {
