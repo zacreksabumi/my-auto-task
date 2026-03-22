@@ -101,10 +101,19 @@ async function getCrypto() {
       await sleep(PAGE_DELAY_MS);
     }
 
-    // Kirim Telegram jika ada kandidat
+    // Hapus duplikasi sebelum kirim Telegram
     if (candidates.length > 0) {
-      let msg = "*🔎 COIN NEAR LOW ALERT*\n\n";
+      const uniqueCandidates = [];
+      const seen = new Set();
       candidates.forEach(c => {
+        if (!seen.has(c.symbol)) {
+          seen.add(c.symbol);
+          uniqueCandidates.push(c);
+        }
+      });
+
+      let msg = "*🔎 COIN NEAR LOW ALERT*\n\n";
+      uniqueCandidates.forEach(c => {
         msg += `*${c.symbol}* | Price: Rp${c.price.toLocaleString("id-ID")} | Low: Rp${c.lowPrice.toLocaleString("id-ID")} | Δ: ${c.diffPercent}%\n`;
       });
       await sendTelegram(msg);
