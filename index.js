@@ -8,7 +8,7 @@ const TELEGRAM_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const CHAT_ID = process.env.TELEGRAM_CHAT_ID;
 
 // Kurs Rupiah
-const USD_TO_IDR = 15000;
+const USD_TO_IDR = 16000;
 
 // CONFIG
 const COINS_PER_PAGE = 100;   // 100 koin per request
@@ -88,7 +88,7 @@ async function getCrypto() {
 
     // Kirim Telegram jika ada kandidat
     if (candidates.length > 0) {
-      let msg = "*🔎 COIN NEAR LOW ALERT*\n\n";
+      let msg = "*🔎 HARGA MENDEKATI LOW PRICE *\n\n";
       candidates.forEach(c => {
         msg += `*${c.symbol}* | Price: Rp${c.price.toLocaleString("id-ID")} | Low: Rp${c.lowPrice.toLocaleString("id-ID")} | Δ: ${c.diffPercent}%\n`;
       });
