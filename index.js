@@ -8,15 +8,18 @@ const TELEGRAM_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const CHAT_ID = process.env.TELEGRAM_CHAT_ID;
 
 // Kurs Rupiah
-const USD_TO_IDR = 16000;
+const USD_TO_IDR = 15000;
 
 // CONFIG
 const COINS_PER_PAGE = 100;   // 100 koin per request
 const MAX_PAGES = 5;          // total 500 koin
 const MAX_PRICE_IDR = 30000;  // maksimal harga koin yang ditampilkan
-const PARALLEL_PAGES = 2;     // request paralel 2 page sekaligus
+const DELAY_MS = 1000;        // delay antar page 1 detik
+const RETRIES = 5;            // retry saat kena 429
+const DIFF_PERCENT_MIN = 0.9;
+const DIFF_PERCENT_MAX = 1.1;
 
-// FUNCTION TELEGRAM
+// Telegram function
 async function sendTelegram(message) {
   if (!TELEGRAM_TOKEN || !CHAT_ID) return;
   const url = `https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage`;
@@ -32,7 +35,30 @@ async function sendTelegram(message) {
   }
 }
 
-// MAIN FUNCTION
+// Delay helper
+function sleep(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+// Fetch dengan retry saat rate limit 429
+async function fetchWithRetry(url, params, retries = RETRIES, delayMs = 2000) {
+  for (let i = 0; i <= retries; i++) {
+    try {
+      const res = await axios.get(url, { params, timeout: 10000 });
+      return res;
+    } catch (err) {
+      if (err.response?.status === 429) {
+        console.warn(`⚠️ Rate limit hit, retry ${i + 1}/${retries}...`);
+        await sleep(delayMs);
+      } else {
+        throw err;
+      }
+    }
+  }
+  throw new Error("Failed after retries due to rate limit");
+}
+
+// Main function
 async function getCrypto() {
   try {
     let oldData = {};
@@ -41,54 +67,42 @@ async function getCrypto() {
     let newData = {};
     let candidates = [];
 
-    const pages = Array.from({length: MAX_PAGES}, (_, i) => i + 1);
-
-    // loop per batch parallel
-    for (let i = 0; i < pages.length; i += PARALLEL_PAGES) {
-      const batch = pages.slice(i, i + PARALLEL_PAGES);
-      const requests = batch.map(page =>
-        axios.get("https://api.coingecko.com/api/v3/coins/markets", {
-          params: {
-            vs_currency: "usd",
-            order: "market_cap_asc", // koin kecil dulu
-            per_page: COINS_PER_PAGE,
-            page,
-          },
-          timeout: 10000
-        })
-      );
-
-      const results = await Promise.all(requests);
-
-      results.forEach(res => {
-        res.data.forEach(c => {
-          const symbol = c.symbol.toUpperCase();
-          const priceUSD = c.current_price;
-          const priceIDR = priceUSD * USD_TO_IDR;
-
-          if (priceIDR >= MAX_PRICE_IDR) return; // filter harga maksimal
-
-          const lowPrice = c.low_24h;
-          const diffPercent = lowPrice > 0 ? ((priceUSD - lowPrice)/lowPrice*100).toFixed(2) : 0;
-
-          if (diffPercent >= 0.9 && diffPercent <= 1.1) {
-            candidates.push({ symbol, price: priceIDR, lowPrice: lowPrice*USD_TO_IDR, diffPercent });
-          }
-
-          // Update historis harga (2 terakhir)
-          let history = oldData[symbol] || [];
-          if (!Array.isArray(history)) history = [history];
-          newData[symbol] = [...history, priceUSD].slice(-2);
-        });
+    for (let page = 1; page <= MAX_PAGES; page++) {
+      console.log(`Scanning page ${page}...`);
+      const res = await fetchWithRetry("https://api.coingecko.com/api/v3/coins/markets", {
+        vs_currency: "usd",
+        order: "market_cap_asc", // koin kecil dulu
+        per_page: COINS_PER_PAGE,
+        page,
       });
 
-      // Delay kecil antar batch supaya aman rate limit
-      await new Promise(r => setTimeout(r, 500));
+      res.data.forEach(c => {
+        const symbol = c.symbol.toUpperCase();
+        const priceUSD = c.current_price;
+        const priceIDR = priceUSD * USD_TO_IDR;
+
+        if (priceIDR >= MAX_PRICE_IDR) return; // filter harga maksimal
+
+        const lowPrice = c.low_24h;
+        const diffPercent = lowPrice > 0 ? ((priceUSD - lowPrice)/lowPrice*100).toFixed(2) : 0;
+
+        if (diffPercent >= DIFF_PERCENT_MIN && diffPercent <= DIFF_PERCENT_MAX) {
+          candidates.push({ symbol, price: priceIDR, lowPrice: lowPrice*USD_TO_IDR, diffPercent });
+        }
+
+        // Update historis harga (2 terakhir)
+        let history = oldData[symbol] || [];
+        if (!Array.isArray(history)) history = [history];
+        newData[symbol] = [...history, priceUSD].slice(-2);
+      });
+
+      // Delay antar page supaya aman rate limit
+      await sleep(DELAY_MS);
     }
 
     // Kirim Telegram jika ada kandidat
     if (candidates.length > 0) {
-      let msg = "*🔎 HARGA MENDEKATI LOW PRICE *\n\n";
+      let msg = "*🔎 COIN NEAR LOW ALERT*\n\n";
       candidates.forEach(c => {
         msg += `*${c.symbol}* | Price: Rp${c.price.toLocaleString("id-ID")} | Low: Rp${c.lowPrice.toLocaleString("id-ID")} | Δ: ${c.diffPercent}%\n`;
       });
