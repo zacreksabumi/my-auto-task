@@ -15,8 +15,8 @@ const USD_TO_IDR = 15000;
 const MAX_PRICE_IDR = 30000;
 const RETRIES = 3;
 const RETRY_DELAY_MS = 5000;
-const DIFF_PERCENT_MIN = 0.9;
-const DIFF_PERCENT_MAX = 1.1;
+const DIFF_PERCENT_MIN = -20;
+const DIFF_PERCENT_MAX = 0.1;
 
 // Load koin dari file JSON
 let ajaibCoins = [];
@@ -129,7 +129,7 @@ async function getCrypto() {
         }
       });
 
-      let msg = "*🔎 COIN NEAR LOW ALERT*\n\n";
+      let msg = "*AKUN ZAC | 🔎 NEAR LOW*\n DATA DARI COINFGECKO\n\n";
 
       unique.forEach(c => {
         msg += `*${c.symbol}* | Price: Rp${c.price.toLocaleString("id-ID")} | Low: Rp${c.lowPrice.toLocaleString("id-ID")} | Δ: ${c.diffPercent}%`;
