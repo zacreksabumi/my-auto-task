@@ -9,7 +9,7 @@ const TELEGRAM_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const CHAT_ID = process.env.TELEGRAM_CHAT_ID;
 
 // Kurs Rupiah
-const USD_TO_IDR = 15000;
+const USD_TO_IDR = 17500;
 
 // CONFIG
 const MAX_PRICE_IDR = 30000;
